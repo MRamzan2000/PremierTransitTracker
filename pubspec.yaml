@@ -1,4 +1,4 @@
-name: app
+name: ai
 description: "A new Flutter project."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
@@ -38,6 +38,13 @@ dependencies:
   url_launcher: ^6.3.1
   permission_handler: ^12.0.0+1
   connectivity_plus: ^7.0.0
+  flutter_inappwebview: ^6.1.5
+  path_provider: ^2.1.5
+  open_file: ^3.5.10
+  flutter_tts: ^4.2.3
+  http: ^1.5.0
+  gallery_saver_plus: ^3.2.9
+
 
 dev_dependencies:
   flutter_test:
@@ -76,7 +83,7 @@ flutter:
   # in this "flutter" section. Each entry in this list should have a
   # "family" key with the font family name, and a "fonts" key with a
   # list giving the asset and other descriptors for the font. For
-  # honmart:
+  # geniefix:
   # fonts:
   #   - family: Schyler
   #     fonts:

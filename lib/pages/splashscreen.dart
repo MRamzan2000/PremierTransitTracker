@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:app/main.dart';
+import 'package:ai/main.dart';
 import 'package:flutter/material.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -30,17 +30,20 @@ class SplashScreenState extends State<SplashScreen> {
         child: Column(mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Image.asset(
-              "assets/applogo.png",
-              fit: BoxFit.fitWidth,
-              height: 200,
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: Image.asset(
+                "assets/applogo.png",
+                fit: BoxFit.fitWidth,
+                height: 200,
+              ),
             ),
             SizedBox(
-              height: 10,
+              height: 30,
             ),
             CircularProgressIndicator(
               strokeWidth: 5,
-              color: Color(0xff0987ea),
+              color: Color(0xff1d1c36),
             )
           ],
         ),
