@@ -4,6 +4,7 @@
 
     <!-- ✅ Internet and WebView access -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
     <!-- ✅ Media / Camera / Mic -->
     <uses-permission android:name="android.permission.CAMERA" />
@@ -26,6 +27,7 @@
         android:name="${applicationName}"
         android:label="GenieFixAI"
         android:icon="@mipmap/ic_launcher"
+        android:enableOnBackInvokedCallback="true"
         android:requestLegacyExternalStorage="true"
         android:usesCleartextTraffic="true"
         android:hardwareAccelerated="true">
@@ -74,6 +76,9 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-5858445367250942~4526017729"/>
     </application>
 
     <!-- ✅ Allow WebView / Voice / Translation access -->
