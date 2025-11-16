@@ -1,555 +1,360 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import 'package:gallery_saver_plus/gallery_saver.dart';
-import 'package:permission_handler/permission_handler.dart';
-import 'package:http/http.dart' as http;
-import 'package:open_file/open_file.dart';
-import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:flutter_tts/flutter_tts.dart';
-import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:location/location.dart';
 
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // ✅ Initialize AdMob once before runApp
-  await MobileAds.instance.initialize();
-  RequestConfiguration configuration = RequestConfiguration(
-    testDeviceIds: ['E2CD3EF53E9A1A8FA16ABB08CCF30865'], // from your logs
-  );
-  MobileAds.instance.updateRequestConfiguration(configuration);
-  await _requestInitialPermissions();
-  runApp(const GenieFixAIApp());
+  runApp(const PremierTaxiMeterApp());
 }
 
-Future<void> _requestInitialPermissions() async {
-  await [
-    Permission.camera,
-    Permission.microphone,
-    Permission.storage,
-    Permission.photos,
-    Permission.videos,
-    Permission.audio,
-    Permission.location,
-  ].request();
-
-  if (await Permission.microphone.isDenied ||
-      await Permission.microphone.isPermanentlyDenied) {
-    await Permission.microphone.request();
-  }
-}
-
-class GenieFixAIApp extends StatelessWidget {
-  const GenieFixAIApp({super.key});
+class PremierTaxiMeterApp extends StatelessWidget {
+  const PremierTaxiMeterApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
+    return MaterialApp(
+      title: 'Premier Taxi Meter',
       debugShowCheckedModeBanner: false,
-      home: HomeScreen(),
+      theme: ThemeData(
+        primaryColor: Colors.black,
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.yellow),
+        scaffoldBackgroundColor: Colors.white,
+        fontFamily: 'Roboto',
+      ),
+      home: const SplashScreen(),
     );
   }
 }
 
-class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+class SplashScreen extends StatefulWidget {
+  const SplashScreen({super.key});
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
-  InAppWebViewController? webViewController;
-  bool _isLoading = true;
-  bool _hasInternet = true;
-  final FlutterTts _flutterTts = FlutterTts();
-
-  // ✅ Ad variables - App Open Ad, Banner Ad, and Interstitial Ad
-  AppOpenAd? _appOpenAd;
-  BannerAd? _bannerAd;
-  InterstitialAd? _interstitialAd;
-  Timer? _bannerRetryTimer;
-  int _interactionCount = 0; // Track user interactions (e.g., page loads as proxy for content views/button actions)
-
+class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    _checkInternet();
-    Connectivity().onConnectivityChanged.listen((_) => _checkInternet());
-
-    // ✅ Load ads asynchronously to avoid main thread blocking
-    _initializeAds();
-  }
-
-  // ✅ Separate method to initialize ads asynchronously
-  Future<void> _initializeAds() async {
-    // Load App Open Ad
-    await _loadAppOpenAd();
-
-    // Load Banner Ad
-    _loadBannerAd();
-
-    // Load Interstitial Ad
-    _loadInterstitialAd();
-  }
-
-  // ✅ App Open Ad - Show only on app launch (cold start)
-  Future<void> _loadAppOpenAd() async {
-    await AppOpenAd.load(
-      adUnitId: 'ca-app-pub-5858445367250942/8620658486', // Original ID
-      request: const AdRequest(),
-      adLoadCallback: AppOpenAdLoadCallback(
-        onAdLoaded: (ad) {
-          _appOpenAd = ad;
-          // Show immediately on app launch
-          if (mounted) {
-            _appOpenAd!.show();
-          }
-        },
-        onAdFailedToLoad: (error) {
-          debugPrint('❌ AppOpenAd failed: $error');
-          _appOpenAd = null;
-        },
-      ),
-    );
-  }
-
-  // ✅ Banner Ad - Bottom placement (Recommended) with retry on failure
-  void _loadBannerAd() {
-    _bannerAd?.dispose(); // Dispose previous if exists
-    _bannerAd = BannerAd(
-      adUnitId: 'ca-app-pub-5858445367250942/8293872343', // Original ID
-      size: AdSize.banner,
-      request: const AdRequest(),
-      listener: BannerAdListener(
-        onAdLoaded: (ad) {
-          if (mounted) {
-            setState(() {}); // Refresh UI to show banner
-          }
-          debugPrint('✅ Banner Ad Loaded');
-          // Cancel retry timer on success
-          _bannerRetryTimer?.cancel();
-        },
-        onAdFailedToLoad: (ad, error) {
-          debugPrint('❌ Banner Ad Failed: $error');
-          ad.dispose();
-          _bannerAd = null;
-          if (mounted) {
-            setState(() {}); // Refresh UI
-          }
-          // Schedule retry after 30 seconds
-          if (_bannerRetryTimer?.isActive ?? false) {
-            _bannerRetryTimer?.cancel();
-          }
-          _bannerRetryTimer = Timer(const Duration(seconds: 30), () {
-            if (mounted) {
-              debugPrint('🔄 Retrying Banner Ad load...');
-              _loadBannerAd();
-            }
-          });
-        },
-      ),
-    );
-    _bannerAd!.load();
-  }
-
-  // ✅ Interstitial Ad - Load and show after every 3 interactions (e.g., page loads/content views)
-  void _loadInterstitialAd() {
-    _interstitialAd?.dispose();
-    InterstitialAd.load(
-      adUnitId: 'ca-app-pub-5858445367250942/8688941243', // Original ID
-      request: const AdRequest(),
-      adLoadCallback: InterstitialAdLoadCallback(
-        onAdLoaded: (ad) {
-          _interstitialAd = ad;
-          debugPrint('✅ Interstitial Ad Loaded');
-        },
-        onAdFailedToLoad: (error) {
-          debugPrint('❌ Interstitial Ad Failed: $error');
-          _interstitialAd = null;
-        },
-      ),
-    );
-  }
-
-  void _maybeShowInterstitialAd() {
-    _interactionCount++; // Increment on each page load (proxy for user action/content view)
-    debugPrint('👆 Interaction count: $_interactionCount');
-
-    // Show every 3 interactions (har 3-4 button clicks/content views ke baad)
-    if (_interactionCount % 3 == 0 && _interstitialAd != null) {
-      _interstitialAd!.fullScreenContentCallback = FullScreenContentCallback(
-        onAdDismissedFullScreenContent: (ad) {
-          debugPrint('⏹️ Interstitial Ad Dismissed');
-          ad.dispose();
-          _interstitialAd = null;
-          // Reload for next time
-          _loadInterstitialAd();
-        },
-        onAdFailedToShowFullScreenContent: (ad, error) {
-          debugPrint('❌ Interstitial Ad Failed to Show: $error');
-          ad.dispose();
-          _interstitialAd = null;
-          _loadInterstitialAd();
-        },
-        onAdImpression: (ad) => debugPrint('📊 Interstitial Ad Impression'),
+    Timer(const Duration(seconds: 2), () {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const MainNavigation()),
       );
-      _interstitialAd!.show();
-    }
-  }
-
-  Future<void> _checkInternet() async {
-    final result = await Connectivity().checkConnectivity();
-    if (result == ConnectivityResult.none) {
-      if (mounted) setState(() => _hasInternet = false);
-      return;
-    }
-    try {
-      final lookup = await InternetAddress.lookup('google.com');
-      if (mounted) setState(() => _hasInternet = lookup.isNotEmpty);
-    } on SocketException {
-      if (mounted) setState(() => _hasInternet = false);
-    }
-  }
-
-  Future<void> _ensureMicrophonePermission() async {
-    final micStatus = await Permission.microphone.status;
-    if (micStatus.isDenied || micStatus.isPermanentlyDenied) {
-      await Permission.microphone.request();
-    }
-  }
-
-  Future<Directory?> _selectDownloadDirectory(BuildContext context) async {
-    return showDialog<Directory>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text("Select Download Location"),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _locationButton("Downloads",
-                      () async => Directory("/storage/emulated/0/Download")),
-              _locationButton("Documents",
-                      () async => Directory("/storage/emulated/0/Documents")),
-              _locationButton("Pictures",
-                      () async => Directory("/storage/emulated/0/Pictures")),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _locationButton(String label, Future<Directory> Function() onSelect) {
-    return ListTile(
-      title: Text(label),
-      onTap: () async {
-        final dir = await onSelect();
-        if (context.mounted) Navigator.pop(context, dir);
-      },
-    );
-  }
-
-  Future<void> _downloadAndSaveFile(
-      Uint8List bytes, String filename, Directory directory) async {
-    try {
-      final filePath = '${directory.path}/$filename';
-      final file = File(filePath);
-      await file.writeAsBytes(bytes);
-
-      if (filename.toLowerCase().endsWith('.jpg') ||
-          filename.toLowerCase().endsWith('.jpeg') ||
-          filename.toLowerCase().endsWith('.png')) {
-        await GallerySaver.saveImage(file.path);
-      }
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('✅ File saved to: ${directory.path}'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-
-      OpenFile.open(file.path);
-    } catch (e) {
-      debugPrint('❌ Save error: $e');
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('❌ Download failed: $e')),
-        );
-      }
-    }
-  }
-
-  Future<void> _handleDownload(
-      InAppWebViewController controller, Uri uri) async {
-    final url = uri.toString();
-    final fileName = url.split('/').last;
-
-    // ✅ Handle base64 data URLs
-    if (url.startsWith("data:")) {
-      try {
-        final parts = url.split(',');
-        if (parts.length != 2) return;
-
-        final mimeType = parts.first;
-        final base64Data = parts.last;
-        final bytes = base64Decode(base64Data);
-
-        String ext = ".bin";
-        if (mimeType.contains("pdf")) ext = ".pdf";
-        else if (mimeType.contains("jpeg") || mimeType.contains("jpg")) ext = ".jpg";
-        else if (mimeType.contains("png")) ext = ".png";
-
-        final dir = await _selectDownloadDirectory(context);
-        if (dir != null) {
-          final safeFileName =
-              'download_${DateTime.now().millisecondsSinceEpoch}$ext';
-          await _downloadAndSaveFile(bytes, safeFileName, dir);
-        }
-      } catch (e) {
-        debugPrint('❌ Data URL decode error: $e');
-      }
-      return;
-    }
-
-    // ✅ Handle blob URLs using JS
-    if (url.startsWith("blob:")) {
-      const jsCode = """
-      (async function(blobUrl) {
-        try {
-          const response = await fetch(blobUrl);
-          const blob = await response.blob();
-          const reader = new FileReader();
-          reader.onloadend = function() {
-            window.flutter_inappwebview.callHandler('blobDownload', reader.result);
-          };
-          reader.readAsDataURL(blob);
-        } catch (e) {
-          window.flutter_inappwebview.callHandler('blobDownload', null);
-        }
-      })('%s');
-      """;
-      await controller.evaluateJavascript(source: jsCode.replaceAll('%s', url));
-      return;
-    }
-
-    // ✅ Handle normal URLs
-    try {
-      final response = await http.get(Uri.parse(url));
-      if (response.statusCode == 200) {
-        final dir = await _selectDownloadDirectory(context);
-        if (dir != null) {
-          String ext = ".bin";
-          final contentType = response.headers['content-type'] ?? "";
-          if (contentType.contains("pdf")) ext = ".pdf";
-          else if (contentType.contains("jpeg") || contentType.contains("jpg")) ext = ".jpg";
-          else if (contentType.contains("png")) ext = ".png";
-
-          final safeFileName = fileName.contains('.')
-              ? fileName
-              : 'download_${DateTime.now().millisecondsSinceEpoch}$ext';
-          await _downloadAndSaveFile(response.bodyBytes, safeFileName, dir);
-        }
-      } else {
-        debugPrint('❌ HTTP download failed: ${response.statusCode}');
-      }
-    } catch (e) {
-      debugPrint('❌ Download error: $e');
-    }
-  }
-
-  Future<void> _speakText(String text) async {
-    try {
-      await _flutterTts.setLanguage("en-US");
-      await _flutterTts.setSpeechRate(0.5);
-      await _flutterTts.speak(text);
-    } catch (e) {
-      debugPrint('🔈 TTS error: $e');
-    }
-  }
-
-  Future<bool> _onWillPop() async {
-    if (webViewController != null && await webViewController!.canGoBack()) {
-      await webViewController!.goBack();
-      return false;
-    }
-    bool? exitApp = await showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text("Exit App?"),
-        content: const Text("Do you want to close GenieFixAI?"),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text("Cancel")),
-          TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text("Exit")),
-        ],
-      ),
-    );
-    return exitApp ?? false;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: _onWillPop,
-      child: Scaffold(
-        backgroundColor: const Color(0xff1d1c36),
-        // ✅ Banner Ad at bottom - only show if loaded (Recommended placement)
-        bottomNavigationBar: _bannerAd != null
-            ? Container(
-          height: _bannerAd!.size.height.toDouble(),
-          width: _bannerAd!.size.width.toDouble(),
-          child: AdWidget(ad: _bannerAd!),
-        )
-            : const SizedBox.shrink(),
-        body: !_hasInternet
-            ? _buildNoInternetScreen()
-            : Stack(
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Padding(
-              padding: const EdgeInsets.only(top: 30),
-              child: Column(
-                children: [
-                  Expanded(
-                    child: InAppWebView(
-                      initialUrlRequest: URLRequest(
-                        url: WebUri("https://geniefixai.live/"),
-                      ),
-                      initialSettings: InAppWebViewSettings(
-                        javaScriptEnabled: true,
-                        allowFileAccessFromFileURLs: true,
-                        allowUniversalAccessFromFileURLs: true,
-                        mediaPlaybackRequiresUserGesture: false,
-                        allowsInlineMediaPlayback: true,
-                        supportZoom: false,
-                        useOnDownloadStart: true,
-                        geolocationEnabled: true,
-                        mixedContentMode:
-                        MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
-                        clearCache: false,
-                      ),
-                      onWebViewCreated: (controller) async {
-                        webViewController = controller;
-                        await _ensureMicrophonePermission();
-
-                        controller.addJavaScriptHandler(
-                          handlerName: 'blobDownload',
-                          callback: (args) async {
-                            if (args.isEmpty || args.first == null) return;
-                            final dataUrl = args.first as String;
-                            final base64Data = dataUrl.split(',').last;
-                            final mimeType = dataUrl.split(';').first;
-
-                            final bytes = base64Decode(base64Data);
-
-                            final dir =
-                            await _selectDownloadDirectory(context);
-                            if (dir != null) {
-                              String fileExt = ".bin";
-                              if (mimeType.contains("application/pdf"))
-                                fileExt = ".pdf";
-                              else if (mimeType.contains("image/jpeg") ||
-                                  mimeType.contains("image/jpg"))
-                                fileExt = ".jpg";
-                              else if (mimeType.contains("image/png"))
-                                fileExt = ".png";
-                              else if (mimeType.contains("text/html"))
-                                fileExt = ".html"; // ✅ invoice blob
-
-                              final fileName =
-                                  "invoice_${DateTime.now().millisecondsSinceEpoch}$fileExt";
-                              await _downloadAndSaveFile(
-                                  bytes, fileName, dir);
-                            }
-                          },
-                        );
-
-                        controller.addJavaScriptHandler(
-                          handlerName: 'flutter_tts',
-                          callback: (args) {
-                            if (args.isNotEmpty) _speakText(args[0]);
-                            return null;
-                          },
-                        );
-                      },
-                      onDownloadStartRequest:
-                          (controller, request) async {
-                        await _handleDownload(controller, request.url);
-                      },
-                      onPermissionRequest:
-                          (controller, request) async {
-                        await _ensureMicrophonePermission();
-                        return PermissionResponse(
-                          resources: request.resources,
-                          action: PermissionResponseAction.GRANT,
-                        );
-                      },
-                      onGeolocationPermissionsShowPrompt:
-                          (controller, origin) async {
-                        return GeolocationPermissionShowPromptResponse(
-                          origin: origin,
-                          allow: true,
-                          retain: true,
-                        );
-                      },
-                      onLoadStart: (controller, url) =>
-                          setState(() => _isLoading = true),
-                      onLoadStop: (controller, url) {
-                        setState(() => _isLoading = false);
-                        // ✅ Trigger interstitial check after content load (proxy for user action/view)
-                        _maybeShowInterstitialAd();
-                      },
-                    ),
-                  ),
-                ],
-              ),
+            Image.asset(
+              'assets/logo.png',
+              width: 120,
+              errorBuilder: (_, __, ___) =>
+              const Icon(Icons.local_taxi, size: 80, color: Colors.yellow),
             ),
-            if (_isLoading)
-              const Center(
-                  child: CircularProgressIndicator(color: Colors.white)),
+            const SizedBox(height: 24),
+            const Text(
+              'Premier Taxi Meter',
+              style: TextStyle(
+                  color: Colors.yellow,
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 40),
+            const CircularProgressIndicator(color: Colors.yellow),
           ],
         ),
       ),
     );
   }
+}
 
-  Widget _buildNoInternetScreen() => Center(
-    child: Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        const Icon(Icons.wifi_off, color: Colors.white, size: 80),
-        const SizedBox(height: 20),
-        const Text("No Internet Connection",
-            style: TextStyle(color: Colors.white, fontSize: 20)),
-        const SizedBox(height: 20),
-        ElevatedButton(
-          onPressed: () async {
-            await _checkInternet();
-            if (_hasInternet) webViewController?.reload();
-          },
-          child: const Text("Retry"),
-        ),
-      ],
-    ),
-  );
+class InAppWebViewPage extends StatefulWidget {
+  final String initialUrl;
+
+  const InAppWebViewPage({
+    super.key,
+    required this.initialUrl,
+  });
+
+  @override
+  State<InAppWebViewPage> createState() => _InAppWebViewPageState();
+}
+
+class _InAppWebViewPageState extends State<InAppWebViewPage>
+    with SingleTickerProviderStateMixin {
+  late InAppWebViewController _webViewController;
+  late AnimationController _animationController;
+  late Animation<double> _rotationAnimation;
+
+  bool _isLoading = true;
+  bool _showLocationError = false;
+
+  final Location _location = Location();
+
+  @override
+  void initState() {
+    super.initState();
+
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 1000),
+      vsync: this,
+    );
+    _rotationAnimation =
+        Tween<double>(begin: 0, end: 1).animate(CurvedAnimation(
+          parent: _animationController,
+          curve: Curves.linear,
+        ));
+
+    _requestLocationPermission();
+  }
+
+  Future<void> _requestLocationPermission() async {
+    bool serviceEnabled = await _location.serviceEnabled();
+    if (!serviceEnabled) {
+      serviceEnabled = await _location.requestService();
+      if (!serviceEnabled) {
+        setState(() => _showLocationError = true);
+        return;
+      }
+    }
+
+    PermissionStatus permission = await _location.hasPermission();
+    if (permission == PermissionStatus.denied) {
+      permission = await _location.requestPermission();
+      if (permission == PermissionStatus.denied) {
+        setState(() => _showLocationError = true);
+        return;
+      }
+    }
+
+    if (permission == PermissionStatus.deniedForever) {
+      setState(() => _showLocationError = true);
+      return;
+    }
+  }
+
+  Future<Map<String, dynamic>> _getCurrentLocation() async {
+    try {
+      final locData = await _location.getLocation();
+      return {
+        'latitude': locData.latitude,
+        'longitude': locData.longitude,
+        'accuracy': locData.accuracy,
+      };
+    } catch (e) {
+      return {'error': e.toString()};
+    }
+  }
+
+  Future<void> _refresh() async {
+    _animationController.repeat();
+    setState(() => _showLocationError = false);
+    await _webViewController.reload();
+  }
 
   @override
   void dispose() {
-    _flutterTts.stop();
-    _bannerRetryTimer?.cancel();
-    _appOpenAd?.dispose();
-    _bannerAd?.dispose();
-    _interstitialAd?.dispose();
+    _animationController.dispose();
     super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return WillPopScope(
+      onWillPop: () async {
+        if (await _webViewController.canGoBack()) {
+          await _webViewController.goBack();
+          return false;
+        }
+
+        final nav = context.findAncestorStateOfType<_MainNavigationState>();
+        if (nav != null && nav._currentIndex != 0) {
+          nav.setState(() => nav._currentIndex = 0);
+          return false;
+        }
+
+        // Show confirmation dialog before exiting the app
+        final shouldExit = await showDialog<bool>(
+          context: context,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: const Text('Exit App'),
+              content: const Text('Do you want to exit the Premier Taxi Meter app?'),
+              actions: <Widget>[
+                TextButton(
+                  child: const Text('No'),
+                  onPressed: () => Navigator.of(context).pop(false),
+                ),
+                TextButton(
+                  child: const Text('Yes'),
+                  onPressed: () => Navigator.of(context).pop(true),
+                ),
+              ],
+            );
+          },
+        );
+
+        return shouldExit ?? false;
+      },
+      child: Scaffold(
+        body: Stack(
+          children: [
+            InAppWebView(
+              initialUrlRequest: URLRequest(url: WebUri(widget.initialUrl)),
+              initialSettings: InAppWebViewSettings(
+                javaScriptEnabled: true,
+                geolocationEnabled: true,
+                allowsInlineMediaPlayback: true,
+                mediaPlaybackRequiresUserGesture: false,
+                safeBrowsingEnabled: true,
+              ),
+              onWebViewCreated: (controller) {
+                _webViewController = controller;
+
+                controller.addJavaScriptHandler(
+                  handlerName: 'requestLocation',
+                  callback: (args) async {
+                    return await _getCurrentLocation();
+                  },
+                );
+              },
+              onLoadStart: (controller, url) {
+                setState(() => _isLoading = true);
+                _animationController.repeat();
+              },
+              onLoadStop: (controller, url) async {
+                setState(() => _isLoading = false);
+                _animationController.stop();
+                _animationController.reset();
+              },
+              onGeolocationPermissionsShowPrompt: (controller, origin) async {
+                return GeolocationPermissionShowPromptResponse(
+                  origin: origin,
+                  allow: true,
+                  retain: true,
+                );
+              },
+            ),
+
+            Positioned(
+              bottom: 100,
+              right: 16,
+              child: AnimatedBuilder(
+                animation: _animationController,
+                builder: (context, child) {
+                  return Transform.rotate(
+                    angle: _rotationAnimation.value * 2 * 3.14159,
+                    child: FloatingActionButton(
+                      onPressed: _refresh,
+                      backgroundColor: Colors.yellow,
+                      foregroundColor: Colors.black,
+                      elevation: 8,
+                      heroTag: "refresh_${widget.initialUrl}",
+                      child: const Icon(Icons.refresh, size: 28),
+                    ),
+                  );
+                },
+              ),
+            ),
+
+            if (_showLocationError)
+              Container(
+                color: Colors.black87,
+                child: Center(
+                  child: Container(
+                    margin: const EdgeInsets.all(24),
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: const [
+                        BoxShadow(color: Colors.black26, blurRadius: 10)
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.location_off,
+                            size: 60, color: Colors.red),
+                        const SizedBox(height: 16),
+                        const Text("GPS Error",
+                            style: TextStyle(
+                                fontSize: 22, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 12),
+                        const Text(
+                          "Location access was denied. Please allow location access and refresh the page.",
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                        const SizedBox(height: 24),
+                        TextButton(
+                            onPressed: _refresh,
+                            child: const Text("Retry",
+                                style: TextStyle(color: Colors.blue))),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class MainNavigation extends StatefulWidget {
+  const MainNavigation({super.key});
+
+  @override
+  State<MainNavigation> createState() => _MainNavigationState();
+}
+
+class _MainNavigationState extends State<MainNavigation> {
+  int _currentIndex = 0;
+
+  late final List<Widget> _pages;
+
+  @override
+  void initState() {
+    super.initState();
+    _pages = [
+      const InAppWebViewPage(
+          initialUrl: "https://taxi-db-tidesoftechnolo.replit.app/"),
+      const InAppWebViewPage(
+          initialUrl:
+          "https://taxi-db-tidesoftechnolo.replit.app/taxi-meter"),
+      const InAppWebViewPage(
+          initialUrl: "https://taxi-db-tidesoftechnolo.replit.app/login"),
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(child: Scaffold(
+      body: IndexedStack(index: _currentIndex, children: _pages),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _currentIndex,
+        backgroundColor: Colors.black,
+        selectedItemColor: Colors.yellow,
+        unselectedItemColor: Colors.grey,
+        onTap: (i) => setState(() => _currentIndex = i),
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: "Home"),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.speed), label: "Launch Meter"),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.lock), label: "Fleet Login"),
+        ],
+      ),
+    ));
   }
 }

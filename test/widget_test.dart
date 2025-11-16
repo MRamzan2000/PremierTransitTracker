@@ -1,7 +1,7 @@
 // This is a basic Flutter widget test.
 //
 // To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For geniefix, you can send tap and scroll
+// utility in the flutter_test package. For premiertransit, you can send tap and scroll
 // gestures. You can also use WidgetTester to find child widgets in the widget
 // tree, read text, and verify that the values of widget properties are correct.
 
@@ -11,7 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our ai and trigger a frame.
+    // Build our taximeter and trigger a frame.
     await tester.pumpWidget( GenieFixAIApp());
 
     // Verify that our counter starts at 0.
